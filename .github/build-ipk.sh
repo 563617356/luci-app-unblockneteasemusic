@@ -75,5 +75,5 @@ curl -fsSL "https://raw.githubusercontent.com/openwrt/openwrt/master/scripts/ipk
 chmod 0755 "$TEMP_DIR/ipkg-build"
 "$TEMP_DIR/ipkg-build" -m "" "$TEMP_PKG_DIR" "$TEMP_DIR"
 
-mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$BASE_DIR/${PKG_NAME}_${PKG_VERSION}_javascript_all.ipk"
+mv "$TEMP_DIR/${PKG_NAME}_${PKG_VERSION}_all.ipk" "$PKG_DIR/${PKG_NAME}_${PKG_VERSION}_javascript_all.ipk"
 rm -rf "$TEMP_DIR"

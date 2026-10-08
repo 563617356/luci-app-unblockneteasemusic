@@ -42,21 +42,21 @@ jobs:
         run: |
           pushd .github
           fakeroot bash build-ipk.sh
-          echo "ASSET_NAME=$(ls *.ipk)" >> $GITHUB_ENV
           popd
+          echo "ASSET_NAME=$(ls *.ipk)" >> "$GITHUB_ENV"
 
       - name: Publishing to GitHub Artifacts
         uses: actions/upload-artifact@v4
         if: github.event_name != 'release'
         with:
           name: ${{ env.ASSET_NAME }}
-          path: .github/*.ipk
+          path: ${{ env.ASSET_NAME }}
 
       - name: Publishing to GitHub Releases
         uses: floralatin/upload-release-action@3688e13ae053ba3052eb4f0cfe03e78deb8f88d7
         if: github.event_name == 'release'
         with:
           repo_token: ${{ github.token }}
-          file: .github/*.ipk
+          file: ${{ env.ASSET_NAME }}
           tag: ${{ github.ref }}
           file_glob: true
