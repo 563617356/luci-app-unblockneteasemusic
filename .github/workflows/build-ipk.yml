@@ -115,7 +115,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import sys
-          p = "${{ env.APK_PATH }}".split("/")[-1]
+          p = "${{ env.APK_NAME }}"
           with open(p, "rb") as f:
               head = f.read(4)
           ok = head[:3] == b"ADB"
