@@ -1,6 +1,7 @@
 name: Build ipk for luci-app-unblockneteasemusic
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'js'
