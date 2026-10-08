@@ -1,4 +1,4 @@
-name: Build ipk for luci-app-unblockneteasemusic
+name: Build luci-app-unblockneteasemusic (ipk + apk)
 
 on:
   workflow_dispatch:
@@ -10,53 +10,132 @@ on:
       - 'root/**'
       - 'Makefile'
       - '.github/**'
-
   pull_request:
-    branch:
+    branches:
       - 'js'
-    types: 
-      - opened
-      - synchronize
-      - reopened
     paths:
       - 'htdocs/**'
       - 'root/**'
       - 'Makefile'
       - '.github/**'
-
   release:
-    types: 
+    types:
       - published
 
 jobs:
-  build:
+  build-ipk:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source tree
         uses: actions/checkout@v4
 
-      - name: Build ipk file
+      - name: Build ipk file (opkg, 24.10 and earlier)
         env:
           RELEASE_TYPE: ${{ github.event_name }}
         run: |
           pushd .github
           fakeroot bash build-ipk.sh
           popd
-          echo "ASSET_NAME=$(ls *.ipk)" >> "$GITHUB_ENV"
+          echo "IPK_NAME=$(ls *.ipk)" >> "$GITHUB_ENV"
 
-      - name: Publishing to GitHub Artifacts
+      - name: Upload ipk artifact
         uses: actions/upload-artifact@v4
         if: github.event_name != 'release'
         with:
-          name: ${{ env.ASSET_NAME }}
-          path: ${{ env.ASSET_NAME }}
+          name: ${{ env.IPK_NAME }}
+          path: ${{ env.IPK_NAME }}
+          retention-days: 90
 
-      - name: Publishing to GitHub Releases
+      - name: Publish ipk to GitHub Releases
         uses: floralatin/upload-release-action@3688e13ae053ba3052eb4f0cfe03e78deb8f88d7
         if: github.event_name == 'release'
         with:
           repo_token: ${{ github.token }}
-          file: ${{ env.ASSET_NAME }}
+          file: ${{ env.IPK_NAME }}
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build-apk:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source tree
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y || true
+          sudo apt-get install -y build-essential git wget tar zstd xz-utils \
+            python3 python3-dev python3-setuptools swig file gawk gettext \
+            libelf-dev libssl-dev rsync unzip
+
+      - name: Download & extract OpenWrt 25.12 SDK (x86_64)
+        env:
+          SDK_URL: https://downloads.openwrt.org/releases/25.12.5/targets/x86/64/openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+        run: |
+          cd /home/runner
+          wget -q "$SDK_URL" -O sdk.tar.zst || { echo "::error::SDK download failed"; exit 1; }
+          zstd -d sdk.tar.zst
+          tar -xf sdk.tar
+          echo "SDK_DIR=$PWD/$(ls -d openwrt-sdk-*)" >> "$GITHUB_ENV"
+
+      - name: Configure feeds and build apk (apk-tools v3, 25.12 and later)
+        env:
+          PKG_NAME: luci-app-unblockneteasemusic
+        run: |
+          cd "$SDK_DIR"
+          # Feeds must match the 25.12 era (apk default). Version mismatch breaks deps.
+          : > feeds.conf.default
+          echo "src-git base https://github.com/openwrt/openwrt.git;openwrt-25.12"     >> feeds.conf.default
+          echo "src-git packages https://github.com/openwrt/packages.git;openwrt-25.12" >> feeds.conf.default
+          echo "src-git luci https://github.com/openwrt/luci.git;openwrt-25.12"         >> feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+          # Place our package (repo root = Makefile + htdocs + root) into package/<name>/
+          mkdir -p "package/$PKG_NAME"
+          cp -r "$GITHUB_WORKSPACE/Makefile" "package/$PKG_NAME/"
+          cp -r "$GITHUB_WORKSPACE/htdocs"   "package/$PKG_NAME/"
+          cp -r "$GITHUB_WORKSPACE/root"     "package/$PKG_NAME/"
+
+          echo "CONFIG_PACKAGE_$PKG_NAME=y" >> .config
+          echo "CONFIG_USE_APK=y" >> .config
+          make defconfig
+
+          make package/$PKG_NAME/clean
+          make package/$PKG_NAME/compile -j"$(nproc)"
+
+          APK=$(find bin/packages -type f -name "*${PKG_NAME}*.apk" | head -n1)
+          if [ -z "$APK" ]; then
+            echo "::error::apk not produced"; find bin/packages -name "*${PKG_NAME}*" | head; exit 1
+          fi
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          cp -f "$APK" "$GITHUB_WORKSPACE/"
+
+      - name: Sanity-check apk format (apk-tools v3 = ADB magic)
+        run: |
+          python3 - <<'PY'
+          import sys
+          p = "${{ env.APK_PATH }}".split("/")[-1]
+          with open(p, "rb") as f:
+              head = f.read(4)
+          ok = head[:3] == b"ADB"
+          print("apk magic:", head, "OK" if ok else "BAD")
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Upload apk artifact
+        uses: actions/upload-artifact@v4
+        if: github.event_name != 'release'
+        with:
+          name: apk
+          path: ${{ env.APK_PATH }}
+          retention-days: 90
+
+      - name: Publish apk to GitHub Releases
+        uses: floralatin/upload-release-action@3688e13ae053ba3052eb4f0cfe03e78deb8f88d7
+        if: github.event_name == 'release'
+        with:
+          repo_token: ${{ github.token }}
+          file: ${{ env.APK_PATH }}
           tag: ${{ github.ref }}
           file_glob: true
