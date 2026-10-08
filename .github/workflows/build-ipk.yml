@@ -108,8 +108,8 @@ jobs:
           if [ -z "$APK" ]; then
             echo "::error::apk not produced"; find bin/packages -name "*${PKG_NAME}*" | head; exit 1
           fi
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
           cp -f "$APK" "$GITHUB_WORKSPACE/"
+          echo "APK_NAME=$(basename "$APK")" >> "$GITHUB_ENV"
 
       - name: Sanity-check apk format (apk-tools v3 = ADB magic)
         run: |
@@ -128,7 +128,7 @@ jobs:
         if: github.event_name != 'release'
         with:
           name: apk
-          path: ${{ env.APK_PATH }}
+          path: ${{ env.APK_NAME }}
           retention-days: 90
 
       - name: Publish apk to GitHub Releases
@@ -136,6 +136,6 @@ jobs:
         if: github.event_name == 'release'
         with:
           repo_token: ${{ github.token }}
-          file: ${{ env.APK_PATH }}
+          file: ${{ env.APK_NAME }}
           tag: ${{ github.ref }}
           file_glob: true
