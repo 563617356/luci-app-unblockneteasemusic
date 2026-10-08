@@ -205,7 +205,10 @@ start_service() {
 			json_add_string acl_http_addr "$(echo -e "${acl_http_addr}" | sort -u)"
 			json_add_string acl_https_addr "$(echo -e "${acl_https_addr}" | sort -u)"
 			json_add_string neteasemusic_addr "$(echo -e "${netease_music_ips}" | jsonfilter -e '@.data.*.ip.*' | sort -u)"
-			json_add_string neteasemusic_addr6 "$(echo -e "${netease_music_ips}" | jsonfilter -e '@.data.*.ipv6.*' | sort -u)"
+			# HTTPDNS v2 no longer returns an "ipv6" field, so the static IPv6
+			# seed is intentionally left empty. IPv6 redirection is handled by
+			# dnsmasq's dynamic nftset (configured in the dnsmasq conf above).
+			json_add_string neteasemusic_addr6 ""
 
 			json_dump > "$RUN_DIR/fw4.info"
 			json_cleanup
